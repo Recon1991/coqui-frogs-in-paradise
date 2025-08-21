@@ -1,23 +1,62 @@
 extends Node
 # (no class_name to avoid autoload name collision)
 
-var gold: float = 0.0
+# ===== Core state =====
+var croaks: float = 0.0
+var lifetime_croaks: float = 0.0
+var cps: float = 0.0
 var base_click: float = 1.0
-var base_rate: float = 0.0
-var rate: float = 0.0
+var rain_spirits: int = 0
 
-# Typed dictionary: upgrade_id -> upgrade fields
-var upgrades: Dictionary[String, Dictionary] = {
-	"miner": {"level": 0, "base_cost": 10.0, "cost_factor": 1.15, "rate_per_level": 0.2},
-	"drill": {"level": 0, "base_cost": 100.0, "cost_factor": 1.15, "rate_per_level": 2.0}
+# Typed: species_id -> count
+var frogs: Dictionary[String, int] = {
+	"backyard_coqui": 0,
+	"tree_coqui": 0,
+	"chorus_leader": 0
 }
 
-var last_time_unix: int = 0
+# Typed: lane -> tier
+var habitats: Dictionary[String, int] = {
+	"water": 0,
+	"foliage": 0,
+	"shelter": 0
+}
+
+# Content defs (JSON-like; keep as untyped Dictionary)
+var species_defs: Dictionary = {
+	"backyard_coqui": {"display":"Backyard Coqui","base_cps":0.2,"base_cost":10.0,"cost_r":1.15,"global_bonus":0.0,"global_cap":0.0},
+	"tree_coqui":     {"display":"Tree Coqui","base_cps":0.35,"base_cost":50.0,"cost_r":1.18,"global_bonus":0.0,"global_cap":0.0},
+	"chorus_leader":  {"display":"Chorus Leader","base_cps":0.05,"base_cost":250.0,"cost_r":1.20,"global_bonus":0.01,"global_cap":0.25}
+}
+
+var habitat_defs: Dictionary = {
+	"water":   {"base_cost":100.0,"cost_r":1.25,"per_tier_mult":0.10},
+	"foliage": {"base_cost":100.0,"cost_r":1.25,"per_tier_mult":0.10},
+	"shelter": {"base_cost":100.0,"cost_r":1.25,"per_tier_mult":0.10}
+}
+
+# Timers & save
 var _autosave_timer: Timer
+var last_time_unix: int = 0
+
+# --- Config knobs (can be overridden by JSON) ---
+var cfg_base_click: float = 1.0
+var cfg_diversity_k: float = 0.15        # M_diversity = 1 + k * sqrt(D)
+var cfg_prestige_threshold: float = 1_000_000.0
+var cfg_prestige_per_spirit: float = 0.10
+var cfg_offline_cap_seconds: int = 3600 * 8
+
+# Optional event knobs (not wired yet)
+var cfg_rain_enabled: bool = false
+var cfg_rain_interval_min: int = 300
+var cfg_rain_interval_max: int = 360
+var cfg_rain_duration: int = 60
+var cfg_rain_mult: float = 1.5
 
 func _ready() -> void:
+	load_config_json()
 	load_game()
-	recompute_rate()
+	recompute_cps()
 	set_process(true)
 
 	_autosave_timer = Timer.new()
@@ -28,42 +67,278 @@ func _ready() -> void:
 	_autosave_timer.timeout.connect(save_game)
 
 func _process(delta: float) -> void:
-	process_tick(delta)
+	croaks += cps * delta
+	lifetime_croaks += cps * delta
 
-func process_tick(delta: float) -> void:
-	gold += rate * delta
-
+# ===== UI hooks =====
 func click() -> void:
-	gold += base_click
+	croaks += base_click
 
-func get_upgrade_cost(id: String) -> float:
-	var data: Dictionary = upgrades[id]
-	var level: int = int(data["level"])
-	return float(data["base_cost"]) * pow(float(data["cost_factor"]), level)
+# ===== Config =====
+func load_config_json(path_user: String = "user://coqui_config.json", path_res: String = "res://config/coqui_config.json") -> void:
+	# Prefer user overrides
+	if FileAccess.file_exists(path_user):
+		_apply_config_file(path_user)
+		return
 
-func can_buy(id: String) -> bool:
-	return gold >= get_upgrade_cost(id)
+	# Else, if a project default exists, apply it and copy to user://
+	if FileAccess.file_exists(path_res):
+		_apply_config_file(path_res)
+		var fin: FileAccess = FileAccess.open(path_res, FileAccess.READ)
+		var fout: FileAccess = FileAccess.open(path_user, FileAccess.WRITE)
+		if fin and fout:
+			fout.store_string(fin.get_as_text())
+			fout.close()
+			fin.close()
+		return
 
-func buy(id: String) -> bool:
-	var cost: float = get_upgrade_cost(id)
-	if gold < cost:
+	# Fallback: generate from hardcoded defaults and write to user://
+	var default_cfg: Dictionary = _make_default_config()
+	apply_config(default_cfg)
+	var fout2: FileAccess = FileAccess.open(path_user, FileAccess.WRITE)
+	if fout2:
+		fout2.store_string(JSON.stringify(default_cfg, "\t"))
+		fout2.close()
+
+func _apply_config_file(path: String) -> void:
+	var f: FileAccess = FileAccess.open(path, FileAccess.READ)
+	if f:
+		var txt: String = f.get_as_text()
+		f.close()
+		var res: Variant = JSON.parse_string(txt)
+		if res is Dictionary:
+			apply_config(res as Dictionary)
+
+func apply_config(cfg: Dictionary) -> void:
+	# Clicks
+	if cfg.has("click"):
+		var clk: Dictionary = cfg["click"] as Dictionary
+		if clk.has("base_click"):
+			cfg_base_click = float(clk["base_click"])
+			base_click = cfg_base_click
+
+	# Species
+	if cfg.has("species"):
+		var sp: Dictionary = cfg["species"] as Dictionary
+		for sid in sp.keys():
+			if not species_defs.has(sid):
+				continue
+			var sdef: Dictionary = species_defs[sid] as Dictionary
+			var src: Dictionary = sp[sid] as Dictionary
+			if src.has("base_cps"):      sdef["base_cps"]  = float(src["base_cps"])
+			if src.has("base_cost"):     sdef["base_cost"] = float(src["base_cost"])
+			if src.has("r"):             sdef["cost_r"]    = float(src["r"])
+			if src.has("global_bonus"):  sdef["global_bonus"] = float(src["global_bonus"])
+			if src.has("global_cap"):    sdef["global_cap"]   = float(src["global_cap"])
+
+	# Habitats
+	if cfg.has("habitats"):
+		var hb: Dictionary = cfg["habitats"] as Dictionary
+		for lane in hb.keys():
+			if not habitat_defs.has(lane):
+				continue
+			var hdef: Dictionary = habitat_defs[lane] as Dictionary
+			var src2: Dictionary = hb[lane] as Dictionary
+			if src2.has("per_tier_mult"): hdef["per_tier_mult"] = float(src2["per_tier_mult"])
+			if src2.has("base_cost"):     hdef["base_cost"]     = float(src2["base_cost"])
+			if src2.has("r"):             hdef["cost_r"]        = float(src2["r"])
+
+	# Diversity
+	if cfg.has("diversity"):
+		var dv: Dictionary = cfg["diversity"] as Dictionary
+		if dv.has("k"):
+			cfg_diversity_k = float(dv["k"])
+
+	# Prestige
+	if cfg.has("prestige"):
+		var pr: Dictionary = cfg["prestige"] as Dictionary
+		if pr.has("threshold"):       cfg_prestige_threshold = float(pr["threshold"])
+		if pr.has("per_spirit_mult"): cfg_prestige_per_spirit = float(pr["per_spirit_mult"])
+
+	# Events (optional)
+	if cfg.has("events"):
+		var ev: Dictionary = cfg["events"] as Dictionary
+		if ev.has("rain_enabled"):    cfg_rain_enabled      = bool(ev["rain_enabled"])
+		if ev.has("interval_min"):    cfg_rain_interval_min = int(ev["interval_min"])
+		if ev.has("interval_max"):    cfg_rain_interval_max = int(ev["interval_max"])
+		if ev.has("duration"):        cfg_rain_duration     = int(ev["duration"])
+		if ev.has("mult"):            cfg_rain_mult         = float(ev["mult"])
+
+	# Offline
+	if cfg.has("offline"):
+		var off: Dictionary = cfg["offline"] as Dictionary
+		if off.has("cap_seconds"):
+			cfg_offline_cap_seconds = int(off["cap_seconds"])
+
+func _make_default_config() -> Dictionary:
+	return {
+		"click": { "base_click": 1.0, "click_scales_with_cps": false, "click_cps_factor": 0.01 },
+		"species": {
+			"backyard_coqui": { "base_cps": 0.2,  "base_cost": 10,  "r": 1.15 },
+			"tree_coqui":     { "base_cps": 0.35, "base_cost": 50,  "r": 1.18 },
+			"chorus_leader":  { "base_cps": 0.05, "base_cost": 250, "r": 1.20, "global_bonus": 0.01, "global_cap": 0.25 }
+		},
+		"habitats": {
+			"water":   { "per_tier_mult": 0.10, "base_cost": 100, "r": 1.25 },
+			"foliage": { "per_tier_mult": 0.10, "base_cost": 100, "r": 1.25 },
+			"shelter": { "per_tier_mult": 0.10, "base_cost": 100, "r": 1.25 }
+		},
+		"diversity": { "k": 0.15 },
+		"prestige":  { "threshold": 1000000, "per_spirit_mult": 0.10, "gain_exp": 0.5 },
+		"events":    { "rain_enabled": false, "interval_min": 300, "interval_max": 360, "duration": 60, "mult": 1.5 },
+		"offline":   { "cap_seconds": 28800 }
+	}
+
+# ===== Costs =====
+func frog_cost(species: String) -> int:
+	var n: int = frogs.get(species, 0)
+	var defn: Dictionary = species_defs[species] as Dictionary
+	return int(ceil(float(defn["base_cost"]) * pow(float(defn["cost_r"]), n)))
+
+func habitat_cost(lane: String) -> int:
+	var tier: int = habitats.get(lane, 0)
+	var defn: Dictionary = habitat_defs[lane] as Dictionary
+	return int(ceil(float(defn["base_cost"]) * pow(float(defn["cost_r"]), tier)))
+
+# ===== Purchasing =====
+func can_buy_frog(species: String) -> bool:
+	return croaks >= frog_cost(species)
+
+func buy_frog(species: String) -> bool:
+	var cost: int = frog_cost(species)
+	if croaks < cost:
 		return false
-	gold -= cost
-	var lvl: int = int(upgrades[id]["level"]) + 1
-	upgrades[id]["level"] = lvl
-	recompute_rate()
+	croaks -= cost
+	frogs[species] = frogs.get(species, 0) + 1
+	recompute_cps()
 	return true
 
-func recompute_rate() -> void:
-	rate = base_rate
-	for id: String in upgrades.keys():
-		var data: Dictionary = upgrades[id]
-		rate += float(data["rate_per_level"]) * float(int(data["level"]))
+func can_buy_habitat(lane: String) -> bool:
+	return croaks >= habitat_cost(lane)
+
+func buy_habitat(lane: String) -> bool:
+	var cost: int = habitat_cost(lane)
+	if croaks < cost:
+		return false
+	croaks -= cost
+	habitats[lane] = habitats.get(lane, 0) + 1
+	recompute_cps()
+	return true
+
+# ===== Production math =====
+func get_diversity() -> int:
+	var d: int = 0
+	for s in species_defs.keys():
+		if frogs.get(s, 0) > 0:
+			d += 1
+	return d
+
+func recompute_cps() -> void:
+	var base_sum: float = 0.0
+	var global_bonus: float = 0.0
+
+	# Global chorus leader bonus (capped)
+	var chorus_count: int = frogs.get("chorus_leader", 0)
+	if chorus_count > 0:
+		var chorus_def: Dictionary = species_defs["chorus_leader"] as Dictionary
+		var per: float = float(chorus_def["global_bonus"])
+		var cap: float = float(chorus_def["global_cap"])
+		global_bonus = min(per * float(chorus_count), cap)
+
+	# Sum base cps
+	for s in species_defs.keys():
+		var count: int = frogs.get(s, 0)
+		if count <= 0:
+			continue
+		var sdef: Dictionary = species_defs[s] as Dictionary
+		var base: float = float(sdef["base_cps"])
+		base_sum += base * float(count)
+
+	# Lane multipliers
+	var wdef: Dictionary = habitat_defs["water"] as Dictionary
+	var fdef: Dictionary = habitat_defs["foliage"] as Dictionary
+	var sdef2: Dictionary = habitat_defs["shelter"] as Dictionary
+	var m_water: float   = 1.0 + float(wdef["per_tier_mult"]) * float(habitats["water"])
+	var m_foliage: float = 1.0 + float(fdef["per_tier_mult"]) * float(habitats["foliage"])
+	var m_shelter: float = 1.0 + float(sdef2["per_tier_mult"]) * float(habitats["shelter"])
+
+	# Diversity & prestige
+	var diversity: int = get_diversity()
+	var m_diversity: float = 1.0 + cfg_diversity_k * sqrt(float(diversity))
+	var m_prestige: float = 1.0 + cfg_prestige_per_spirit * float(rain_spirits)
+	var m_global: float    = 1.0 + global_bonus
+
+	cps = base_sum * m_water * m_foliage * m_shelter * m_diversity * m_prestige * m_global
+
+# ===== Prestige =====
+func can_prestige() -> bool:
+	return lifetime_croaks >= cfg_prestige_threshold
+
+func prestige_gain() -> int:
+	if not can_prestige():
+		return 0
+	return int(floor(pow(lifetime_croaks / 1_000_000.0, 0.5)))
+
+func do_prestige() -> void:
+	if not can_prestige():
+		return
+	rain_spirits += prestige_gain()
+	# reset
+	croaks = 0.0
+	lifetime_croaks = 0.0
+	for s in frogs.keys():
+		frogs[s] = 0
+	for l in habitats.keys():
+		habitats[l] = 0
+	recompute_cps()
+	save_game()
+
+func is_species_unlocked(id: String) -> bool:
+	# Always unlocked:
+	if id == "backyard_coqui":
+		return true
+
+	# Rule: Tree Coqui → need Water/Foliage/Shelter ≥ 1
+	if id == "tree_coqui":
+		return habitats.get("water", 0)   >= 1 \
+			and habitats.get("foliage", 0) >= 1 \
+			and habitats.get("shelter", 0) >= 1
+
+	# Rule: Chorus Leader → need diversity ≥ 2 and Water ≥ 2
+	if id == "chorus_leader":
+		return get_diversity() >= 2 and habitats.get("water", 0) >= 2
+
+	# default (if you add new species later)
+	return false
+
+func species_unlock_hint(id: String) -> String:
+	if id == "backyard_coqui":
+		return ""
+	if id == "tree_coqui":
+		return "Locked — reach Water I, Foliage I, Shelter I"
+	if id == "chorus_leader":
+		return "Locked — reach Diversity 2 and Water II"
+	return "Locked — requirement not set"
+
+
+# ===== Save / Load (with typed-cast helpers) =====
+func _load_into_int_map(src: Variant, target: Dictionary[String, int]) -> void:
+	if not (src is Dictionary):
+		return
+	var d: Dictionary = src
+	for k in d.keys():
+		var key: String = String(k)
+		var val_any: Variant = d[k]
+		var val_int: int = int(val_any)
+		target[key] = val_int
 
 func save_game() -> void:
 	var data: Dictionary = {
-		"gold": gold,
-		"upgrades": upgrades,
+		"croaks": croaks,
+		"lifetime": lifetime_croaks,
+		"spirits": rain_spirits,
+		"frogs": frogs,
+		"habitats": habitats,
 		"last_time_unix": Time.get_unix_time_from_system()
 	}
 	var f: FileAccess = FileAccess.open("user://save.json", FileAccess.WRITE)
@@ -73,6 +348,7 @@ func save_game() -> void:
 		f.close()
 
 func load_game() -> void:
+	var now: int = Time.get_unix_time_from_system()
 	if FileAccess.file_exists("user://save.json"):
 		var f: FileAccess = FileAccess.open("user://save.json", FileAccess.READ)
 		if f:
@@ -81,26 +357,41 @@ func load_game() -> void:
 			var res: Variant = JSON.parse_string(txt)
 			if res is Dictionary:
 				var d: Dictionary = res
-				gold = float(d.get("gold", 0.0))
-				var loaded_up: Variant = d.get("upgrades", upgrades)
-				if loaded_up is Dictionary:
-					upgrades = loaded_up as Dictionary[String, Dictionary]
-				last_time_unix = int(d.get("last_time_unix", Time.get_unix_time_from_system()))
-				recompute_rate()
-				# Offline progress (avoid Variant math warnings by keeping ints explicit)
-				var now: int = Time.get_unix_time_from_system()
+				croaks = float(d.get("croaks", 0.0))
+				lifetime_croaks = float(d.get("lifetime", 0.0))
+				rain_spirits = int(d.get("spirits", 0))
+
+				# Copy+cast into typed maps
+				_load_into_int_map(d.get("frogs", null), frogs)
+				_load_into_int_map(d.get("habitats", null), habitats)
+
+				last_time_unix = int(d.get("last_time_unix", now))
+				recompute_cps()
+
+				# Offline progress (8h cap) without max/min Variant pitfalls
 				var elapsed_raw: int = now - last_time_unix
-				var elapsed: int = elapsed_raw if elapsed_raw > 0 else 0
-				var eight_hours: int = 3600 * 8
-				var capped: int = elapsed if elapsed < eight_hours else eight_hours
-				gold += rate * float(capped)
+				if elapsed_raw < 0:
+					elapsed_raw = 0
+				var capped: int = elapsed_raw
+				var cap_limit: int = cfg_offline_cap_seconds
+				if capped > cap_limit:
+					capped = cap_limit
+				if capped > 0:
+					croaks += cps * float(capped)
+					lifetime_croaks += cps * float(capped)
+				last_time_unix = now
 	else:
-		last_time_unix = Time.get_unix_time_from_system()
-		recompute_rate()
+		last_time_unix = now
+		recompute_cps()
 
 func hard_reset() -> void:
-	gold = 0.0
-	for id: String in upgrades.keys():
-		upgrades[id]["level"] = 0
-	recompute_rate()
+	croaks = 0.0
+	lifetime_croaks = 0.0
+	rain_spirits = 0
+	for s in frogs.keys():
+		frogs[s] = 0
+	for l in habitats.keys():
+		habitats[l] = 0
+	last_time_unix = Time.get_unix_time_from_system()
+	recompute_cps()
 	save_game()
