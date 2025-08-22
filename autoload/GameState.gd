@@ -1,6 +1,9 @@
 extends Node
 # (no class_name to avoid autoload name collision)
 
+@onready var Config := get_node("/root/Config") as ConfigService
+@onready var Unlocks := get_node("/root/Unlocks") as Unlocks
+
 # ===== Core state =====
 var croaks: float = 0.0
 var lifetime_croaks: float = 0.0
@@ -45,6 +48,8 @@ var cfg_diversity_k: float = 0.15        # M_diversity = 1 + k * sqrt(D)
 var cfg_prestige_threshold: float = 1_000_000.0
 var cfg_prestige_per_spirit: float = 0.10
 var cfg_offline_cap_seconds: int = 3600 * 8
+var cfg_unlocks_species: Dictionary = {}   # species_id -> rule dict
+var cfg_unlocks_habitats: Dictionary = {}  # habitat_id -> rule dict
 
 # Optional event knobs (not wired yet)
 var cfg_rain_enabled: bool = false
@@ -54,7 +59,7 @@ var cfg_rain_duration: int = 60
 var cfg_rain_mult: float = 1.5
 
 func _ready() -> void:
-	load_config_json()
+	Config.load_config_json()
 	load_game()
 	recompute_cps()
 	set_process(true)
@@ -72,7 +77,7 @@ func _process(delta: float) -> void:
 
 # ===== UI hooks =====
 func click() -> void:
-	croaks += base_click
+	croaks += Config.base_click
 
 # ===== Config =====
 func load_config_json(path_user: String = "user://coqui_config.json", path_res: String = "res://config/coqui_config.json") -> void:
@@ -169,6 +174,15 @@ func apply_config(cfg: Dictionary) -> void:
 		var off: Dictionary = cfg["offline"] as Dictionary
 		if off.has("cap_seconds"):
 			cfg_offline_cap_seconds = int(off["cap_seconds"])
+			
+	# Unlocks
+	if cfg.has("unlocks"):
+		var un: Dictionary = cfg["unlocks"] as Dictionary
+		if un.has("species"):
+			cfg_unlocks_species = (un["species"] as Dictionary).duplicate(true)
+		if un.has("habitats"):
+			cfg_unlocks_habitats = (un["habitats"] as Dictionary).duplicate(true)
+
 
 func _make_default_config() -> Dictionary:
 	return {
@@ -192,12 +206,12 @@ func _make_default_config() -> Dictionary:
 # ===== Costs =====
 func frog_cost(species: String) -> int:
 	var n: int = frogs.get(species, 0)
-	var defn: Dictionary = species_defs[species] as Dictionary
+	var defn: Dictionary = Config.species_defs[species] as Dictionary
 	return int(ceil(float(defn["base_cost"]) * pow(float(defn["cost_r"]), n)))
 
 func habitat_cost(lane: String) -> int:
 	var tier: int = habitats.get(lane, 0)
-	var defn: Dictionary = habitat_defs[lane] as Dictionary
+	var defn: Dictionary = Config.habitat_defs[lane] as Dictionary
 	return int(ceil(float(defn["base_cost"]) * pow(float(defn["cost_r"]), tier)))
 
 # ===== Purchasing =====
@@ -205,9 +219,10 @@ func can_buy_frog(species: String) -> bool:
 	return croaks >= frog_cost(species)
 
 func buy_frog(species: String) -> bool:
-	var cost: int = frog_cost(species)
-	if croaks < cost:
+	if not Unlocks.is_unlocked(species, frogs, habitats, get_diversity(), lifetime_croaks):
 		return false
+	var cost := frog_cost(species)
+	if croaks < cost: return false
 	croaks -= cost
 	frogs[species] = frogs.get(species, 0) + 1
 	recompute_cps()
@@ -217,6 +232,8 @@ func can_buy_habitat(lane: String) -> bool:
 	return croaks >= habitat_cost(lane)
 
 func buy_habitat(lane: String) -> bool:
+	if not is_habitat_unlocked(lane):
+		return false
 	var cost: int = habitat_cost(lane)
 	if croaks < cost:
 		return false
@@ -224,6 +241,7 @@ func buy_habitat(lane: String) -> bool:
 	habitats[lane] = habitats.get(lane, 0) + 1
 	recompute_cps()
 	return true
+
 
 # ===== Production math =====
 func get_diversity() -> int:
@@ -234,45 +252,39 @@ func get_diversity() -> int:
 	return d
 
 func recompute_cps() -> void:
-	var base_sum: float = 0.0
-	var global_bonus: float = 0.0
+	var base_sum := 0.0
+	var global_bonus := 0.0
 
-	# Global chorus leader bonus (capped)
-	var chorus_count: int = frogs.get("chorus_leader", 0)
-	if chorus_count > 0:
-		var chorus_def: Dictionary = species_defs["chorus_leader"] as Dictionary
-		var per: float = float(chorus_def["global_bonus"])
-		var cap: float = float(chorus_def["global_cap"])
-		global_bonus = min(per * float(chorus_count), cap)
+	# chorus global (if present in config)
+	if Config.species_defs.has("chorus_leader"):
+		var chorus_def: Dictionary = Config.species_defs["chorus_leader"] as Dictionary
+		var per := float(chorus_def.get("global_bonus", 0.0))
+		var cap := float(chorus_def.get("global_cap", 0.0))
+		global_bonus = min(per * float(frogs.get("chorus_leader", 0)), cap)
 
-	# Sum base cps
-	for s in species_defs.keys():
+	for s in Config.species_defs.keys():
 		var count: int = frogs.get(s, 0)
-		if count <= 0:
-			continue
-		var sdef: Dictionary = species_defs[s] as Dictionary
-		var base: float = float(sdef["base_cps"])
-		base_sum += base * float(count)
+		if count <= 0: continue
+		var sdef: Dictionary = Config.species_defs[s] as Dictionary
+		base_sum += float(sdef["base_cps"]) * float(count)
 
-	# Lane multipliers
-	var wdef: Dictionary = habitat_defs["water"] as Dictionary
-	var fdef: Dictionary = habitat_defs["foliage"] as Dictionary
-	var sdef2: Dictionary = habitat_defs["shelter"] as Dictionary
-	var m_water: float   = 1.0 + float(wdef["per_tier_mult"]) * float(habitats["water"])
-	var m_foliage: float = 1.0 + float(fdef["per_tier_mult"]) * float(habitats["foliage"])
-	var m_shelter: float = 1.0 + float(sdef2["per_tier_mult"]) * float(habitats["shelter"])
+	var w := Config.habitat_defs["water"] as Dictionary
+	var f := Config.habitat_defs["foliage"] as Dictionary
+	var sh := Config.habitat_defs["shelter"] as Dictionary
+	var m_water   := 1.0 + float(w["per_tier_mult"])  * float(habitats["water"])
+	var m_foliage := 1.0 + float(f["per_tier_mult"])  * float(habitats["foliage"])
+	var m_shelter := 1.0 + float(sh["per_tier_mult"]) * float(habitats["shelter"])
 
-	# Diversity & prestige
-	var diversity: int = get_diversity()
-	var m_diversity: float = 1.0 + cfg_diversity_k * sqrt(float(diversity))
-	var m_prestige: float = 1.0 + cfg_prestige_per_spirit * float(rain_spirits)
-	var m_global: float    = 1.0 + global_bonus
+	var diversity := get_diversity()
+	var m_diversity := 1.0 + Config.k_diversity * sqrt(float(diversity))
+	var m_prestige  := 1.0 + Config.prestige_per_spirit * float(rain_spirits)
+	var m_global    := 1.0 + global_bonus
 
 	cps = base_sum * m_water * m_foliage * m_shelter * m_diversity * m_prestige * m_global
 
 # ===== Prestige =====
 func can_prestige() -> bool:
-	return lifetime_croaks >= cfg_prestige_threshold
+	return lifetime_croaks >= Config.prestige_threshold
 
 func prestige_gain() -> int:
 	if not can_prestige():
@@ -294,32 +306,119 @@ func do_prestige() -> void:
 	save_game()
 
 func is_species_unlocked(id: String) -> bool:
-	# Always unlocked:
 	if id == "backyard_coqui":
 		return true
+	if not cfg_unlocks_species.has(id):
+		return true
+	var rule: Dictionary = cfg_unlocks_species[id] as Dictionary
 
-	# Rule: Tree Coqui → need Water/Foliage/Shelter ≥ 1
-	if id == "tree_coqui":
-		return habitats.get("water", 0)   >= 1 \
-			and habitats.get("foliage", 0) >= 1 \
-			and habitats.get("shelter", 0) >= 1
+	# habitats gate
+	if rule.has("habitats"):
+		var need: Dictionary = rule["habitats"] as Dictionary
+		for lane in need.keys():
+			if habitats.get(String(lane), 0) < int(need[lane]):
+				return false
 
-	# Rule: Chorus Leader → need diversity ≥ 2 and Water ≥ 2
-	if id == "chorus_leader":
-		return get_diversity() >= 2 and habitats.get("water", 0) >= 2
+	# diversity gate
+	if rule.has("diversity") and get_diversity() < int(rule["diversity"]):
+		return false
 
-	# default (if you add new species later)
-	return false
+	# lifetime croaks gate
+	if rule.has("lifetime") and lifetime_croaks < float(rule["lifetime"]):
+		return false
+
+	# frog counts gate
+	if rule.has("frogs"):
+		var fneed: Dictionary = rule["frogs"] as Dictionary
+		for sid in fneed.keys():
+			if frogs.get(String(sid), 0) < int(fneed[sid]):
+				return false
+
+	return true
+
 
 func species_unlock_hint(id: String) -> String:
 	if id == "backyard_coqui":
 		return ""
-	if id == "tree_coqui":
-		return "Locked — reach Water I, Foliage I, Shelter I"
-	if id == "chorus_leader":
-		return "Locked — reach Diversity 2 and Water II"
-	return "Locked — requirement not set"
+	if not cfg_unlocks_species.has(id):
+		return ""
+	var rule: Dictionary = cfg_unlocks_species[id] as Dictionary
+	var parts: Array[String] = []
 
+	if rule.has("habitats"):
+		var lane_txt: Array[String] = []
+		var need: Dictionary = rule["habitats"] as Dictionary
+		for lane in need.keys():
+			lane_txt.append("%s %s" % [String(lane).capitalize(), _roman(int(need[lane]))])
+		parts.append("Reach " + ", ".join(lane_txt))
+	if rule.has("diversity"):
+		parts.append("Diversity %d" % int(rule["diversity"]))
+	if rule.has("lifetime"):
+		parts.append("Lifetime %.0f croaks" % float(rule["lifetime"]))
+	if rule.has("frogs"):
+		var fneed: Dictionary = rule["frogs"] as Dictionary
+		for sid in fneed.keys():
+			parts.append("%s x%d" % [String(sid).capitalize().replace("_"," "), int(fneed[sid])])
+
+	return "Locked — " + "; ".join(parts)
+
+func _roman(n: int) -> String:
+	var map := {1000:"M",900:"CM",500:"D",400:"CD",100:"C",90:"XC",50:"L",40:"XL",10:"X",9:"IX",5:"V",4:"IV",1:"I"}
+	var s := ""; var x := n
+	for k in map.keys():
+		var v: int = int(k)
+		while x >= v:
+			s += map[k]; x -= v
+	return s
+
+# Habitats
+func is_habitat_unlocked(id: String) -> bool:
+	# Default: unlocked if no rule provided
+	if not cfg_unlocks_habitats.has(id):
+		return true
+	var rule: Dictionary = cfg_unlocks_habitats[id] as Dictionary
+
+	# Gate by CPS threshold
+	if rule.has("cps"):
+		if cps < float(rule["cps"]):
+			return false
+
+	# Optional gates you may add later:
+	# lifetime croaks
+	if rule.has("lifetime"):
+		if lifetime_croaks < float(rule["lifetime"]):
+			return false
+	# diversity
+	if rule.has("diversity"):
+		if get_diversity() < int(rule["diversity"]):
+			return false
+
+	return true
+
+func habitat_unlock_hint(id: String) -> String:
+	if not cfg_unlocks_habitats.has(id):
+		return ""
+	var rule: Dictionary = cfg_unlocks_habitats[id] as Dictionary
+	var parts: Array[String] = []
+
+	if rule.has("cps"):
+		parts.append("Unlocks at %s CPS" % _fmt_float(float(rule["cps"])))
+	if rule.has("diversity"):
+		parts.append("Diversity %d" % int(rule["diversity"]))
+	if rule.has("lifetime"):
+		parts.append("Lifetime %.0f croaks" % float(rule["lifetime"]))
+
+	if parts.is_empty():
+		return "Locked"
+	return "Locked — " + "; ".join(parts)
+
+# Helper function to format decimals
+func _fmt_float(x: float) -> String:
+	# drop trailing .0 for whole numbers, keep 1–2 decimals otherwise
+	var i: int = int(x)
+	if float(i) == x:
+		return str(i)
+	return "%.2f" % x
 
 # ===== Save / Load (with typed-cast helpers) =====
 func _load_into_int_map(src: Variant, target: Dictionary[String, int]) -> void:
@@ -373,7 +472,7 @@ func load_game() -> void:
 				if elapsed_raw < 0:
 					elapsed_raw = 0
 				var capped: int = elapsed_raw
-				var cap_limit: int = cfg_offline_cap_seconds
+				var cap_limit: int = Config.offline_cap_seconds
 				if capped > cap_limit:
 					capped = cap_limit
 				if capped > 0:

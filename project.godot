@@ -20,6 +20,8 @@ config/icon="res://icon.svg"
 [autoload]
 
 GameState="*res://autoload/GameState.gd"
+Config="*res://scripts/services/ConfigService.gd"
+Unlocks="*res://scripts/services/Unlocks.gd"
 
 [editor]
 

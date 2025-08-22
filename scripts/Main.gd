@@ -7,6 +7,9 @@ extends Control
 @onready var backyard_col: VBoxContainer = %BackyardCol
 @onready var tree_col: VBoxContainer = %TreeCol
 @onready var chorus_col: VBoxContainer = %ChorusCol
+@onready var water_col:   VBoxContainer = %WaterCol
+@onready var foliage_col: VBoxContainer = %FoliageCol
+@onready var shelter_col: VBoxContainer = %ShelterCol
 
 # Stats row
 @onready var croaks_label: Label = %CroaksLabel
@@ -87,47 +90,112 @@ func update_ui() -> void:
 	# cache current croaks once and reuse
 	var c: float = gs.croaks
 
-	# --- FROGS ---
-	var n_back: int = int(gs.frogs.get("backyard_coqui", 0))
-	var n_tree: int = int(gs.frogs.get("tree_coqui", 0))
+	# --- FROGS (with unlocks) ---
+	var n_back: int   = int(gs.frogs.get("backyard_coqui", 0))
+	var n_tree: int   = int(gs.frogs.get("tree_coqui", 0))
 	var n_chorus: int = int(gs.frogs.get("chorus_leader", 0))
 
+	# Unlock checks + hints
+	var unlocked_tree: bool   = gs.is_species_unlocked("tree_coqui")
+	var unlocked_chorus: bool = gs.is_species_unlocked("chorus_leader")
+	var hint_tree: String     = gs.species_unlock_hint("tree_coqui")
+	var hint_chorus: String   = gs.species_unlock_hint("chorus_leader")
+
+	# Backyard (always unlocked)
+	backyard_col.modulate = Color(1,1,1,1)
 	backyard_count.text = "Owned: %d" % n_back
-	tree_count.text = "Owned: %d" % n_tree
-	chorus_count.text = "Owned: %d" % n_chorus
-
 	var cost_back: int = gs.frog_cost("backyard_coqui")
-	var cost_tree: int = gs.frog_cost("tree_coqui")
-	var cost_chorus: int = gs.frog_cost("chorus_leader")
-
 	backyard_buy.text = "Buy (%s)" % _fmt(float(cost_back))
-	tree_buy.text     = "Buy (%s)" % _fmt(float(cost_tree))
-	chorus_buy.text   = "Buy (%s)" % _fmt(float(cost_chorus))
-
 	backyard_buy.disabled = c < float(cost_back)
-	tree_buy.disabled     = c < float(cost_tree)
-	chorus_buy.disabled   = c < float(cost_chorus)
 
-	# --- HABITATS ---
+	# Tree Coqui
+	if unlocked_tree:
+		tree_col.modulate = Color(1,1,1,1)
+		tree_count.text = "Owned: %d" % n_tree
+		var cost_tree: int = gs.frog_cost("tree_coqui")
+		tree_buy.text = "Buy (%s)" % _fmt(float(cost_tree))
+		tree_buy.disabled = c < float(cost_tree)
+		tree_buy.tooltip_text = ""
+	else:
+		tree_col.modulate = Color(1,1,1,0.5)  # gray out when locked
+		tree_count.text = "Owned: —"
+		tree_buy.text = hint_tree             # show requirement on the button
+		tree_buy.disabled = true
+		tree_buy.tooltip_text = hint_tree
+
+	# Chorus Leader
+	if unlocked_chorus:
+		chorus_col.modulate = Color(1,1,1,1)
+		chorus_count.text = "Owned: %d" % n_chorus
+		var cost_chorus: int = gs.frog_cost("chorus_leader")
+		chorus_buy.text = "Buy (%s)" % _fmt(float(cost_chorus))
+		chorus_buy.disabled = c < float(cost_chorus)
+		chorus_buy.tooltip_text = ""
+	else:
+		chorus_col.modulate = Color(1,1,1,0.5)
+		chorus_count.text = "Owned: —"
+		chorus_buy.text = hint_chorus
+		chorus_buy.disabled = true
+		chorus_buy.tooltip_text = hint_chorus
+
+
+	# --- HABITATS (with unlocks) ---
 	var t_water: int   = int(gs.habitats.get("water", 0))
 	var t_foliage: int = int(gs.habitats.get("foliage", 0))
 	var t_shelter: int = int(gs.habitats.get("shelter", 0))
 
-	water_tier.text   = "Tier: %d" % t_water
-	foliage_tier.text = "Tier: %d" % t_foliage
-	shelter_tier.text = "Tier: %d" % t_shelter
+	var unlocked_water: bool   = gs.is_habitat_unlocked("water")
+	var unlocked_foliage: bool = gs.is_habitat_unlocked("foliage")
+	var unlocked_shelter: bool = gs.is_habitat_unlocked("shelter")
 
-	var cost_water: int   = gs.habitat_cost("water")
-	var cost_foliage: int = gs.habitat_cost("foliage")
-	var cost_shelter: int = gs.habitat_cost("shelter")
+	var hint_water: String   = gs.habitat_unlock_hint("water")
+	var hint_foliage: String = gs.habitat_unlock_hint("foliage")
+	var hint_shelter: String = gs.habitat_unlock_hint("shelter")
 
-	water_buy.text   = "Upgrade (%s)" % _fmt(float(cost_water))
-	foliage_buy.text = "Upgrade (%s)" % _fmt(float(cost_foliage))
-	shelter_buy.text = "Upgrade (%s)" % _fmt(float(cost_shelter))
+	# Water
+	if unlocked_water:
+		water_col.modulate = Color(1,1,1,1)
+		water_tier.text    = "Tier: %d" % t_water
+		var cost_water: int = gs.habitat_cost("water")
+		water_buy.text     = "Upgrade (%s)" % _fmt(float(cost_water))
+		water_buy.disabled = c < float(cost_water)
+		water_buy.tooltip_text = ""
+	else:
+		water_col.modulate = Color(1,1,1,0.5)
+		water_tier.text    = "Tier: —"
+		water_buy.text     = hint_water
+		water_buy.disabled = true
+		water_buy.tooltip_text = hint_water
 
-	water_buy.disabled   = c < float(cost_water)
-	foliage_buy.disabled = c < float(cost_foliage)
-	shelter_buy.disabled = c < float(cost_shelter)
+	# Foliage
+	if unlocked_foliage:
+		foliage_col.modulate = Color(1,1,1,1)
+		foliage_tier.text    = "Tier: %d" % t_foliage
+		var cost_foliage: int = gs.habitat_cost("foliage")
+		foliage_buy.text     = "Upgrade (%s)" % _fmt(float(cost_foliage))
+		foliage_buy.disabled = c < float(cost_foliage)
+		foliage_buy.tooltip_text = ""
+	else:
+		foliage_col.modulate = Color(1,1,1,0.5)
+		foliage_tier.text    = "Tier: —"
+		foliage_buy.text     = hint_foliage
+		foliage_buy.disabled = true
+		foliage_buy.tooltip_text = hint_foliage
+
+	# Shelter
+	if unlocked_shelter:
+		shelter_col.modulate = Color(1,1,1,1)
+		shelter_tier.text    = "Tier: %d" % t_shelter
+		var cost_shelter: int = gs.habitat_cost("shelter")
+		shelter_buy.text     = "Upgrade (%s)" % _fmt(float(cost_shelter))
+		shelter_buy.disabled = c < float(cost_shelter)
+		shelter_buy.tooltip_text = ""
+	else:
+		shelter_col.modulate = Color(1,1,1,0.5)
+		shelter_tier.text    = "Tier: —"
+		shelter_buy.text     = hint_shelter
+		shelter_buy.disabled = true
+		shelter_buy.tooltip_text = hint_shelter
 
 	click_button.text = "Click (+%s)" % _fmt(gs.base_click)
 

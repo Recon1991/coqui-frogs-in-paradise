@@ -1,9 +1,9 @@
 {
-  "click": { "base_click": 1.0, "click_scales_with_cps": false, "click_cps_factor": 0.01 },
+  "click": { "base_click": 1.0 },
   "species": {
-	"backyard_coqui": { "base_cps": 0.2, "base_cost": 10,  "r": 1.15 },
-	"tree_coqui":     { "base_cps": 0.35,"base_cost": 50,  "r": 1.18 },
-	"chorus_leader":  { "base_cps": 0.05,"base_cost": 250, "r": 1.20, "global_bonus": 0.01, "global_cap": 0.25 }
+	"backyard_coqui": { "base_cps": 0.2,  "base_cost": 10,  "r": 1.15 },
+	"tree_coqui":     { "base_cps": 0.35, "base_cost": 50,  "r": 1.18 },
+	"chorus_leader":  { "base_cps": 0.05, "base_cost": 250, "r": 1.20, "global_bonus": 0.01, "global_cap": 0.25 }
   },
   "habitats": {
 	"water":   { "per_tier_mult": 0.10, "base_cost": 100, "r": 1.25 },
@@ -11,7 +11,18 @@
 	"shelter": { "per_tier_mult": 0.10, "base_cost": 100, "r": 1.25 }
   },
   "diversity": { "k": 0.15 },
-  "prestige":  { "threshold": 1000000, "per_spirit_mult": 0.10, "gain_exp": 0.5 },
-  "events":    { "rain_enabled": false, "interval_min": 300, "interval_max": 360, "duration": 60, "mult": 1.5 },
-  "offline":   { "cap_seconds": 28800 }
+  "prestige":  { "threshold": 1000000, "per_spirit_mult": 0.10 },
+  "offline":   { "cap_seconds": 28800 },
+
+  "unlocks": {
+	"species": {
+	  "tree_coqui":    { "habitats": { "water": 1, "foliage": 1, "shelter": 1 } },
+	  "chorus_leader": { "diversity": 2, "habitats": { "water": 2 } }
+	},
+	"habitats": {
+	  "water":   { "cps": 5   },
+	  "foliage": { "cps": 20  },
+	  "shelter": { "cps": 50  }
+	}
+  }
 }
