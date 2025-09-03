@@ -1,0 +1,78 @@
+key,en
+# UI Chrome
+ui.play,Play
+ui.pause,Pause
+ui.settings,Settings
+ui.shop.title,Shop
+ui.abilities.title,Abilities
+ui.back,Back
+ui.buy,Buy
+ui.owned,Owned
+ui.cost,Cost
+ui.currency,Echo Points
+ui.serene_mode,Serene Mode
+ui.language,Language
+ui.volume.master,Master Volume
+ui.volume.music,Music Volume
+ui.volume.sfx,SFX Volume
+ui.continue,Continue
+
+# Shop Categories
+shop.cat.frogs,Frog Choir
+shop.cat.habitat,Habitat
+shop.cat.abilities,Whimsical Abilities
+
+# Frog Items
+item.frog_1.name,First Coquí
+item.frog_1.desc,Your first companion. Clicking makes it sing.
+item.frog_2.name,Harmony Coquí
+item.frog_2.desc,Adds a second pitch with call-and-response.
+item.frog_3.name,Alto Coquí
+item.frog_3.desc,Adds a harmony tone to the chorus.
+item.frog_4.name,Rhythm Coquí
+item.frog_4.desc,Adds a bass-like croak for depth.
+item.frog_rare.name,Luminous Coquí
+item.frog_rare.desc,A rare sparkling frog with glowing call.
+
+# Habitat Items
+item.hab_fireflies.name,Fireflies
+item.hab_fireflies.desc,Glowing particles bring the scene to life.
+item.hab_plants.name,Rainforest Plants
+item.hab_plants.desc,Fills the scene with lush foliage.
+item.hab_reflection.name,Pond Reflection
+item.hab_reflection.desc,Adds water and ripple reflections.
+item.hab_stars.name,Starscape
+item.hab_stars.desc,A shimmering sky full of stars.
+item.hab_aurora.name,Aurora Veil
+item.hab_aurora.desc,A magical aurora illuminates the night.
+
+# Abilities
+item.ab_rain_dance.name,Rain Dance
+item.ab_rain_dance.desc,Boosts frog calls during a short rainfall.
+item.ab_echo_song.name,Echo Song
+item.ab_echo_song.desc,Doubles frog call rate briefly with echo FX.
+item.ab_starfall.name,Starfall
+item.ab_starfall.desc,Summons twinkling stars and click bonuses.
+item.ab_paradise_call.name,Paradise Call
+item.ab_paradise_call.desc,Unlocks the full serene soundscape.
+
+# Messages
+msg.not_enough_ep,You need {missing} more {currency}.
+msg.seconds.one,{n} second
+msg.seconds.other,{n} seconds
+
+# Accessibility Labels
+a11y.button.ability,Ability button
+a11y.toggle.fireflies,Toggle fireflies
+a11y.toggle.music,Toggle music
+a11y.slider.volume,Volume slider
+
+# Disclaimer
+disclaimer.text,This is a visual/audio experience. Adjust volume before continuing.
+disclaimer.continue,Continue
+
+# Main Menu
+menu.continue,Continue
+menu.newgame,New Game
+menu.settings,Settings
+menu.quit,Quit

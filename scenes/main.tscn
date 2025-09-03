@@ -1,192 +1,44 @@
-[gd_scene load_steps=2 format=3 uid="uid://wuejyohgq038"]
+[gd_scene load_steps=2 format=3 uid="uid://b6grk8h2v76ry"]
 
-[ext_resource type="Script" uid="uid://yjvb7w5dngoq" path="res://scripts/Main.gd" id="1_o5qli"]
+[ext_resource type="Script" uid="uid://do8ct3i3xumx2" path="res://scripts/Main.gd" id="1_elqb8"]
 
-[node name="Control" type="Control"]
+[node name="Main" type="Node"]
+script = ExtResource("1_elqb8")
+
+[node name="GameScene" type="Node2D" parent="."]
+process_mode = 1
+
+[node name="UILayer" type="CanvasLayer" parent="."]
+process_mode = 3
+
+[node name="HUD" type="Control" parent="UILayer"]
+process_mode = 3
 layout_mode = 3
-anchors_preset = 15
-anchor_right = 1.0
-anchor_bottom = 1.0
-grow_horizontal = 2
-grow_vertical = 2
-script = ExtResource("1_o5qli")
-
-[node name="RootMargin" type="MarginContainer" parent="."]
-layout_mode = 0
+anchors_preset = 0
 offset_right = 40.0
 offset_bottom = 40.0
-theme_override_constants/margin_left = 32
-theme_override_constants/margin_top = 32
-theme_override_constants/margin_right = 32
-theme_override_constants/margin_bottom = 32
 
-[node name="RootVBox" type="VBoxContainer" parent="RootMargin"]
-layout_mode = 2
-theme_override_constants/separation = 12
-
-[node name="StatsRow" type="HBoxContainer" parent="RootMargin/RootVBox"]
-layout_mode = 2
-
-[node name="CroaksLabel" type="Label" parent="RootMargin/RootVBox/StatsRow"]
-unique_name_in_owner = true
-layout_mode = 2
-text = "Croaks: 0"
-
-[node name="CPSLabel" type="Label" parent="RootMargin/RootVBox/StatsRow"]
-unique_name_in_owner = true
-layout_mode = 2
-text = "CPS: 0"
-
-[node name="PrestigeButton" type="Button" parent="RootMargin/RootVBox/StatsRow"]
-unique_name_in_owner = true
+[node name="ShopPanel" type="Control" parent="UILayer"]
+process_mode = 3
 visible = false
-layout_mode = 2
-text = "Call the Rains!"
+layout_mode = 3
+anchors_preset = 0
+offset_right = 40.0
+offset_bottom = 40.0
 
-[node name="HSeparator" type="HSeparator" parent="RootMargin/RootVBox"]
-layout_mode = 2
+[node name="SettingsPanel" type="Control" parent="UILayer"]
+process_mode = 3
+visible = false
+layout_mode = 3
+anchors_preset = 0
+offset_right = 40.0
+offset_bottom = 40.0
 
-[node name="FrogsRow" type="HBoxContainer" parent="RootMargin/RootVBox"]
-layout_mode = 2
+[node name="ModalOverlay" type="ColorRect" parent="UILayer"]
+process_mode = 3
+visible = false
+offset_right = 40.0
+offset_bottom = 40.0
+color = Color(1, 1, 1, 0.5)
 
-[node name="BackyardCol" type="VBoxContainer" parent="RootMargin/RootVBox/FrogsRow"]
-unique_name_in_owner = true
-layout_mode = 2
-
-[node name="BackyardTitle" type="Label" parent="RootMargin/RootVBox/FrogsRow/BackyardCol"]
-unique_name_in_owner = true
-layout_mode = 2
-text = "Backyard Coqui"
-
-[node name="BackyardCountLabel" type="Label" parent="RootMargin/RootVBox/FrogsRow/BackyardCol"]
-unique_name_in_owner = true
-layout_mode = 2
-text = "Owned: 0"
-
-[node name="BackyardBuyButton" type="Button" parent="RootMargin/RootVBox/FrogsRow/BackyardCol"]
-unique_name_in_owner = true
-layout_mode = 2
-text = "Buy (10)"
-
-[node name="TreeCol" type="VBoxContainer" parent="RootMargin/RootVBox/FrogsRow"]
-unique_name_in_owner = true
-layout_mode = 2
-
-[node name="TreeTitle" type="Label" parent="RootMargin/RootVBox/FrogsRow/TreeCol"]
-unique_name_in_owner = true
-layout_mode = 2
-text = "Tree Coqui"
-
-[node name="TreeCountLabel" type="Label" parent="RootMargin/RootVBox/FrogsRow/TreeCol"]
-unique_name_in_owner = true
-layout_mode = 2
-text = "Owned: 0"
-
-[node name="TreeBuyButton" type="Button" parent="RootMargin/RootVBox/FrogsRow/TreeCol"]
-unique_name_in_owner = true
-layout_mode = 2
-text = "Buy (50)"
-
-[node name="ChorusCol" type="VBoxContainer" parent="RootMargin/RootVBox/FrogsRow"]
-unique_name_in_owner = true
-layout_mode = 2
-
-[node name="ChorusTitle" type="Label" parent="RootMargin/RootVBox/FrogsRow/ChorusCol"]
-unique_name_in_owner = true
-layout_mode = 2
-text = "Chorus Leader"
-
-[node name="ChorusCountLabel" type="Label" parent="RootMargin/RootVBox/FrogsRow/ChorusCol"]
-unique_name_in_owner = true
-layout_mode = 2
-text = "Owned: 0"
-
-[node name="ChorusBuyButton" type="Button" parent="RootMargin/RootVBox/FrogsRow/ChorusCol"]
-unique_name_in_owner = true
-layout_mode = 2
-text = "Buy (250)"
-
-[node name="HSeparator2" type="HSeparator" parent="RootMargin/RootVBox"]
-layout_mode = 2
-
-[node name="HabitatsRow" type="HBoxContainer" parent="RootMargin/RootVBox"]
-layout_mode = 2
-
-[node name="WaterCol" type="VBoxContainer" parent="RootMargin/RootVBox/HabitatsRow"]
-layout_mode = 2
-
-[node name="WaterTitle" type="Label" parent="RootMargin/RootVBox/HabitatsRow/WaterCol"]
-unique_name_in_owner = true
-layout_mode = 2
-text = "Water"
-
-[node name="WaterTierLabel" type="Label" parent="RootMargin/RootVBox/HabitatsRow/WaterCol"]
-unique_name_in_owner = true
-layout_mode = 2
-text = "Tier: 0"
-
-[node name="WaterBuyButton" type="Button" parent="RootMargin/RootVBox/HabitatsRow/WaterCol"]
-unique_name_in_owner = true
-layout_mode = 2
-text = "Upgrade (100)"
-
-[node name="FoliageCol" type="VBoxContainer" parent="RootMargin/RootVBox/HabitatsRow"]
-layout_mode = 2
-
-[node name="FoliageTitle" type="Label" parent="RootMargin/RootVBox/HabitatsRow/FoliageCol"]
-unique_name_in_owner = true
-layout_mode = 2
-text = "Foliage"
-
-[node name="FoliageTierLabel" type="Label" parent="RootMargin/RootVBox/HabitatsRow/FoliageCol"]
-unique_name_in_owner = true
-layout_mode = 2
-text = "Tier: 0"
-
-[node name="FoliageBuyButton" type="Button" parent="RootMargin/RootVBox/HabitatsRow/FoliageCol"]
-unique_name_in_owner = true
-layout_mode = 2
-text = "Upgrade (100)"
-
-[node name="ShelterCol" type="VBoxContainer" parent="RootMargin/RootVBox/HabitatsRow"]
-layout_mode = 2
-
-[node name="ShelterTitle" type="Label" parent="RootMargin/RootVBox/HabitatsRow/ShelterCol"]
-unique_name_in_owner = true
-layout_mode = 2
-text = "Shelter"
-
-[node name="ShelterTierLabel" type="Label" parent="RootMargin/RootVBox/HabitatsRow/ShelterCol"]
-unique_name_in_owner = true
-layout_mode = 2
-text = "Tier: 0"
-
-[node name="ShelterBuyButton" type="Button" parent="RootMargin/RootVBox/HabitatsRow/ShelterCol"]
-unique_name_in_owner = true
-layout_mode = 2
-text = "Upgrade (100)"
-
-[node name="HSeparator3" type="HSeparator" parent="RootMargin/RootVBox"]
-layout_mode = 2
-
-[node name="BottomRow" type="HBoxContainer" parent="RootMargin/RootVBox"]
-layout_mode = 2
-
-[node name="ClickButton" type="Button" parent="RootMargin/RootVBox/BottomRow"]
-unique_name_in_owner = true
-layout_mode = 2
-text = "Click (+1)"
-
-[node name="Control" type="Control" parent="RootMargin/RootVBox/BottomRow"]
-layout_mode = 2
-size_flags_horizontal = 3
-
-[node name="SaveButton" type="Button" parent="RootMargin/RootVBox/BottomRow"]
-unique_name_in_owner = true
-layout_mode = 2
-text = "Save"
-
-[node name="ResetButton" type="Button" parent="RootMargin/RootVBox/BottomRow"]
-unique_name_in_owner = true
-layout_mode = 2
-text = "Hard Reset"
+[node name="AudioBusHelper" type="Node" parent="."]

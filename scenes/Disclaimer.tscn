@@ -1,0 +1,65 @@
+[gd_scene load_steps=2 format=3 uid="uid://djecxltsww18i"]
+
+[ext_resource type="Script" uid="uid://dv6k1kr7p6shv" path="res://scripts/disclaimer.gd" id="1_xmtsl"]
+
+[node name="Disclaimer" type="CanvasLayer"]
+script = ExtResource("1_xmtsl")
+
+[node name="Control" type="Control" parent="."]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="FullscreenBG" type="ColorRect" parent="Control"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+color = Color(0.278043, 0.157282, 0.138283, 1)
+
+[node name="CenterContainer" type="CenterContainer" parent="Control/FullscreenBG"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="DisclaimerBox" type="VBoxContainer" parent="Control/FullscreenBG/CenterContainer"]
+custom_minimum_size = Vector2(640, 0)
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+alignment = 1
+
+[node name="DisclaimerText" type="Label" parent="Control/FullscreenBG/CenterContainer/DisclaimerBox"]
+unique_name_in_owner = true
+layout_mode = 2
+horizontal_alignment = 1
+autowrap_mode = 2
+
+[node name="HBoxContainer" type="HBoxContainer" parent="Control/FullscreenBG/CenterContainer/DisclaimerBox"]
+layout_mode = 2
+
+[node name="VolumePercent" type="Label" parent="Control/FullscreenBG/CenterContainer/DisclaimerBox/HBoxContainer"]
+unique_name_in_owner = true
+layout_mode = 2
+
+[node name="VolumeSlider" type="HSlider" parent="Control/FullscreenBG/CenterContainer/DisclaimerBox/HBoxContainer"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(600, 0)
+layout_mode = 2
+size_flags_horizontal = 3
+max_value = 1.0
+step = 0.01
+
+[node name="ContinueButton" type="Button" parent="Control/FullscreenBG/CenterContainer/DisclaimerBox"]
+unique_name_in_owner = true
+layout_mode = 2
