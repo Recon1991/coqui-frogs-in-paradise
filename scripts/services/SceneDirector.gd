@@ -19,10 +19,14 @@ func _ready() -> void:
 	call_deferred("_start")
 
 func _start() -> void:
-	Transition.use_fade()                     # ensure simple alpha fade mode
-	Transition.color = Color(1, 0, 0.7, 1)    # HOT PINK to be unmistakable
-	await _goto_with_fade(SCN_DISCLAIMER)  # long, visible durations for the test
- # long enough to notice
+	# Ensure overlay exists and is in fade mode
+	if _has_transition():
+		Transition.use_fade()
+		# Instantly set to fully covered (black)
+		await Transition.fade_to(1.0, 0.0)
+
+	# First hop: we are already black, so skip fade-out and only fade-in
+	await _goto_with_fade(SCN_DISCLAIMER, true)
 
 func _await_ready(svc: Object, label: String) -> void:
 	if typeof(svc) != TYPE_OBJECT or not is_instance_valid(svc):
@@ -44,7 +48,7 @@ func _has_transition() -> bool:
 		and Transition.has_method("fade_out") \
 		and Transition.has_method("fade_in")
 
-func _goto_with_fade(path: String) -> void:
+func _goto_with_fade(path: String, from_black: bool = false) -> void:
 	if _switching: return
 	_switching = true
 
@@ -53,15 +57,15 @@ func _goto_with_fade(path: String) -> void:
 		_switching = false
 		return
 
-	# fade to black using Transition's inspector values
-	if typeof(Transition) == TYPE_OBJECT and is_instance_valid(Transition):
+	# Only fade-out if we are NOT already covered
+	if not from_black and _has_transition():
 		await Transition.fade_out_default()
 
 	get_tree().call_deferred("change_scene_to_file", path)
 	await get_tree().process_frame
 
-	# fade from black using Transition's inspector values
-	if typeof(Transition) == TYPE_OBJECT and is_instance_valid(Transition):
+	# Always fade-in to reveal the new scene
+	if _has_transition():
 		await Transition.fade_in_default()
 
 	_switching = false
