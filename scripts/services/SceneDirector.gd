@@ -19,8 +19,10 @@ func _ready() -> void:
 	call_deferred("_start")
 
 func _start() -> void:
-	print("[SceneDirector] start → disclaimer")
-	await _goto_with_fade(SCN_DISCLAIMER)
+	Transition.use_fade()                     # ensure simple alpha fade mode
+	Transition.color = Color(1, 0, 0.7, 1)    # HOT PINK to be unmistakable
+	await _goto_with_fade(SCN_DISCLAIMER)  # long, visible durations for the test
+ # long enough to notice
 
 func _await_ready(svc: Object, label: String) -> void:
 	if typeof(svc) != TYPE_OBJECT or not is_instance_valid(svc):
@@ -42,6 +44,28 @@ func _has_transition() -> bool:
 		and Transition.has_method("fade_out") \
 		and Transition.has_method("fade_in")
 
+func _goto_with_fade(path: String) -> void:
+	if _switching: return
+	_switching = true
+
+	if not ResourceLoader.exists(path):
+		push_error("[SceneDirector] Scene not found: " + path)
+		_switching = false
+		return
+
+	# fade to black using Transition's inspector values
+	if typeof(Transition) == TYPE_OBJECT and is_instance_valid(Transition):
+		await Transition.fade_out_default()
+
+	get_tree().call_deferred("change_scene_to_file", path)
+	await get_tree().process_frame
+
+	# fade from black using Transition's inspector values
+	if typeof(Transition) == TYPE_OBJECT and is_instance_valid(Transition):
+		await Transition.fade_in_default()
+
+	_switching = false
+
 func goto_disclaimer() -> void:
 	await _goto_with_fade(SCN_DISCLAIMER)
 
@@ -54,28 +78,9 @@ func goto_menu() -> void:
 func goto_gameplay() -> void:
 	await _goto_with_fade(SCN_GAME)
 
-func _goto_with_fade(path: String, fade_out_dur := 0.25, fade_in_dur := 0.20) -> void:
-	if _switching:
-		print("[SceneDirector] already switching, ignoring", path)
-		return
-	_switching = true
-
-	if not ResourceLoader.exists(path):
-		push_error("[SceneDirector] Scene not found: " + path)
-		_switching = false
-		return
-
-	print("[SceneDirector] → fade_out + switch:", path)
-	if _has_transition():
-		await Transition.fade_out(fade_out_dur)
-	else:
-		await get_tree().process_frame
-
-	get_tree().call_deferred("change_scene_to_file", path)
-	await get_tree().process_frame
-
-	if _has_transition():
-		await Transition.fade_in(fade_in_dur)
-
-	print("[SceneDirector] switched to", path)
-	_switching = false
+func _debug_canvas_layers() -> void:
+	print("--- CanvasLayers in /root ---")
+	for n in get_tree().get_root().get_children():
+		if n is CanvasLayer:
+			var cl := n as CanvasLayer
+			print("  ", n.name, " layer=", cl.layer)

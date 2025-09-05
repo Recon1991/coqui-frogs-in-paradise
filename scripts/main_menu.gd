@@ -35,3 +35,10 @@ func _settings() -> void:
 
 func _quit() -> void:
 	get_tree().quit()
+	
+func _unhandled_input(e: InputEvent) -> void:
+	if e.is_action_pressed("ui_focus_next"): # usually Tab
+		Transition.use_fade()
+		Transition.color = Color(1, 1, 1, 1)   # white flash
+		await Transition.fade_out(0.6)
+		await Transition.fade_in(0.6)

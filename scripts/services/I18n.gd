@@ -99,8 +99,8 @@ func _load_csv_translations(path: String) -> void:
 					continue
 				var text: String = String(cols[i])
 				if text != "":
-					var tr: Translation = locale_to_tr[loc] as Translation
-					tr.add_message(key, text)
+					var tr_res: Translation = locale_to_tr[loc] as Translation
+					tr_res.add_message(key, text)
 
 		line_idx += 1
 

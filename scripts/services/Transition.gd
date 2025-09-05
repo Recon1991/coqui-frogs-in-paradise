@@ -8,96 +8,137 @@ signal faded_in
 @export var color: Color = Color.BLACK
 @export var block_input: bool = true
 @export var start_opaque: bool = false
-@export var default_trans: int = Tween.TRANS_SINE
-@export var default_ease:  int = Tween.EASE_IN_OUT
 
-var is_ready := false
-var _rect: ColorRect
-var _tween: Tween
-var _mode: String = "fade"  # "fade" or "shader"
+# Easing options
+const EASE_SINE := 0
+const EASE_QUAD := 1
+@export var ease_type: int = EASE_SINE      # 0 = Sine, 1 = Quad
+@export var ease_in_out: bool = true        # true: InOut, false: Out
+@export var out_duration: float = 0.40      # fade to black
+@export var in_duration:  float = 0.30      # fade from black
+
+const _INPUT_BLOCK_THRESHOLD := 0.02
+
+var is_ready: bool = false
+var _rect: ColorRect = null
+var _mode: String = "fade"  # "fade" or "shader" (we use fade by default)
 
 func _ready() -> void:
-	layer = 1000
+	layer = 4096
 	process_mode = Node.PROCESS_MODE_WHEN_PAUSED
 	_ensure_rect()
+	get_viewport().size_changed.connect(_on_viewport_resized)
+	_on_viewport_resized()
 	is_ready = true
 	ready_signal.emit()
 
 func _ensure_rect() -> void:
-	if _rect: return
+	if _rect != null:
+		return
 	_rect = ColorRect.new()
 	_rect.color = color
-	_rect.modulate.a = 1.0 if start_opaque else 0.0
-	_rect.mouse_filter = Control.MOUSE_FILTER_STOP if block_input else Control.MOUSE_FILTER_IGNORE
+	if start_opaque:
+		_rect.modulate.a = 1.0
+	else:
+		_rect.modulate.a = 0.0
+	_rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_rect.z_index = 4096
 	add_child(_rect)
-	_rect.set_anchors_preset(Control.PRESET_FULL_RECT)
 
-# ---------- Effect selection ----------
+func _on_viewport_resized() -> void:
+	var sz: Vector2 = get_viewport().get_visible_rect().size
+	_rect.position = Vector2.ZERO
+	_rect.size = sz
+
+# ---------- effect selection ----------
 func use_fade() -> void:
 	_mode = "fade"
-	if _rect: _rect.material = null
+	_ensure_rect()
+	_rect.material = null
+	if _rect.modulate.a < 0.0:
+		_rect.modulate.a = 0.0
+	if _rect.modulate.a > 1.0:
+		_rect.modulate.a = 1.0
 
-func use_wipe(angle_deg: float = 0.0, softness: float = 0.03) -> void:
-	_mode = "shader"
-	var mat := ShaderMaterial.new()
-	mat.shader = load("res://shaders/transition_wipe.gdshader")
-	mat.set_shader_parameter("angle", deg_to_rad(angle_deg))
-	mat.set_shader_parameter("softness", softness)
-	_rect.material = mat
+# (If you add shader effects later, call _apply_material(...) and keep _rect.modulate.a = 1.0)
 
-func use_circle(center: Vector2 = Vector2(0.5, 0.5), softness: float = 0.03, invert: bool = false) -> void:
-	_mode = "shader"
-	var mat := ShaderMaterial.new()
-	mat.shader = load("res://shaders/transition_circle.gdshader")
-	mat.set_shader_parameter("center", center)
-	mat.set_shader_parameter("softness", softness)
-	mat.set_shader_parameter("invert", invert)
-	_rect.material = mat
-
-func use_dissolve(noise: Texture2D, softness: float = 0.06, scale: float = 2.0, invert: bool = false) -> void:
-	_mode = "shader"
-	var mat := ShaderMaterial.new()
-	mat.shader = load("res://shaders/transition_dissolve.gdshader")
-	mat.set_shader_parameter("noise_tex", noise)
-	mat.set_shader_parameter("softness", softness)
-	mat.set_shader_parameter("scale", scale)
-	mat.set_shader_parameter("invert", invert)
-	_rect.material = mat
-
-# ---------- Progress driver ----------
-func _set_progress(p: float) -> void:
-	if _mode == "fade" or _rect.material == null:
-		_rect.modulate.a = clamp(p, 0.0, 1.0)
+# ---------- helpers ----------
+func _update_mouse_filter() -> void:
+	var p: float = get_progress()
+	if block_input and p > _INPUT_BLOCK_THRESHOLD:
+		_rect.mouse_filter = Control.MOUSE_FILTER_STOP
 	else:
-		_rect.material.set_shader_parameter("progress", clamp(p, 0.0, 1.0))
+		_rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
+
+func _set_progress(p: float) -> void:
+	var clamped: float = clamp(p, 0.0, 1.0)
+	_rect.modulate.a = clamped
+	_update_mouse_filter()
 
 func get_progress() -> float:
-	if _mode == "fade" or _rect.material == null:
-		return _rect.modulate.a
-	return float(_rect.material.get_shader_parameter("progress"))
+	return _rect.modulate.a
 
-# ---------- Play ----------
-func fade_to(target: float, dur := 0.25, trans := default_trans, ease := default_ease) -> void:
+func _ease01(t: float) -> float:
+	# t in [0..1]
+	if ease_type == EASE_SINE:
+		if ease_in_out:
+			return 0.5 - 0.5 * cos(PI * t)   # Sine InOut
+		else:
+			return sin(t * PI * 0.5)        # Sine Out
+	else:
+		# QUAD
+		if ease_in_out:
+			if t < 0.5:
+				return 2.0 * t * t
+			else:
+				return 1.0 - pow(-2.0 * t + 2.0, 2.0) * 0.5
+		else:
+			return 1.0 - pow(1.0 - t, 2.0)  # Quad Out
+
+# ---------- manual animation (no Tween) ----------
+func fade_to(target: float, dur: float = 0.25) -> void:
 	_ensure_rect()
-	target = clamp(target, 0.0, 1.0)
-	if dur <= 0.0 or is_equal_approx(get_progress(), target):
-		_set_progress(target)
-		if is_equal_approx(target, 0.0): faded_in.emit()
-		elif is_equal_approx(target, 1.0): faded_out.emit()
+	var tgt: float = clamp(target, 0.0, 1.0)
+	var start: float = get_progress()
+
+	# instant path
+	if dur <= 0.0 or is_equal_approx(start, tgt):
+		_set_progress(tgt)
+		if is_equal_approx(tgt, 0.0):
+			faded_in.emit()
+		elif is_equal_approx(tgt, 1.0):
+			faded_out.emit()
 		return
 
-	if _tween: _tween.kill()
-	_tween = create_tween().set_trans(trans).set_ease(ease)
-	_tween.tween_method(_set_progress, get_progress(), target, dur)
-	await get_tree().create_timer(dur).timeout
-	_set_progress(target)
-	_tween = null
+	# If increasing coverage, block immediately
+	if block_input and tgt > start:
+		_rect.mouse_filter = Control.MOUSE_FILTER_STOP
 
-	if is_equal_approx(target, 0.0): faded_in.emit()
-	elif is_equal_approx(target, 1.0): faded_out.emit()
+	var steps: int = max(1, int(ceil(dur * 60.0)))
+	var step_time: float = dur / float(steps)
 
-func fade_out(dur := 0.25, trans := default_trans, ease := default_ease) -> void:
-	await fade_to(1.0, dur, trans, ease)
+	for i in range(steps):
+		var t: float = float(i + 1) / float(steps)  # 0→1
+		var e: float = _ease01(t)
+		var v: float = lerp(start, tgt, e)
+		_set_progress(v)
+		await get_tree().create_timer(step_time).timeout
 
-func fade_in(dur := 0.25, trans := default_trans, ease := default_ease) -> void:
-	await fade_to(0.0, dur, trans, ease)
+	# snap to exact target & emit
+	_set_progress(tgt)
+	if is_equal_approx(tgt, 0.0):
+		faded_in.emit()
+	elif is_equal_approx(tgt, 1.0):
+		faded_out.emit()
+
+func fade_out(dur: float) -> void:
+	await fade_to(1.0, dur)
+
+func fade_in(dur: float) -> void:
+	await fade_to(0.0, dur)
+	
+func fade_out_default() -> void:
+	await fade_out(out_duration)
+
+func fade_in_default() -> void:
+	await fade_in(in_duration)
